@@ -1,0 +1,44 @@
+filename = 'Stabalized.MP4.avi'; % Insert file name
+
+hVideoSrc = VideoReader(filename,"CurrentTime",2);
+videoPlayer = vision.VideoPlayer('Position',[100,100,680,520]);
+frame = rgb2gray(im2single(readFrame(hVideoSrc))); % Read first frame into imgA
+
+ii = 1;
+
+figure; imshow(frame);
+
+
+% Select Region
+%objectRegion=round(getPosition(imrect))
+%objectImage = insertShape(frame,'Rectangle',objectRegion,'Color','red');
+%imshow(frame);
+%hold on;
+%imshow(objectImage);
+%hold off
+
+%objectRegion = [708   535    11     9];
+
+points = detectMinEigenFeatures(im2gray(frame),'ROI',objectRegion);
+
+pointImage = insertMarker(frame,points.Location,'+','Color','white');
+figure;
+imshow(pointImage);
+title('Detected interest points');
+
+tracker = vision.PointTracker('MaxBidirectionalError',0.1,'NumPyramidLevels',3,'BlockSize',[9,9] );
+initialize(tracker,points.Location,frame);
+
+
+while hasFrame(hVideoSrc) && ii < 100
+    frame = rgb2gray(im2single(readFrame(hVideoSrc))); % Read second frame into img
+    %sif = detectHarrisFeatures(frame(ROIoffsetx:ROIoffsetx+100,ROIoffsety:ROIoffsety+100));
+    
+    
+    %sif.Location = sif.Location+[ROIoffsetx,ROIoffsety];
+    [points,validity] = tracker(frame);
+    out = insertMarker(frame,points(validity, :),'+');
+    videoPlayer(out);
+    %plot(sif.selectStrongest(3))
+    ii = ii+1;
+end
