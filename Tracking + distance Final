@@ -1,0 +1,81 @@
+filename = 'Stabalized.MP4.avi';
+clear MotionModel
+close all
+hVideoSrc = VideoReader(filename,"CurrentTime",2);
+videoPlayer = vision.VideoPlayer('Position',[100,100,680,520]);
+frame = rgb2gray(im2single(readFrame(hVideoSrc))); % Read first frame into imgA
+
+boey_size = 0.15;
+ii = 1;
+frameTimer = 4;
+Calibration = load('calibrationSession.mat');
+cameraParams = Calibration.calibrationSession.CameraParameters;
+px = cameraParams.PrincipalPoint(1,1);
+dx = cameraParams.FocalLength(1,1);
+py = cameraParams.PrincipalPoint(1,2);
+dy = cameraParams.FocalLength(1,2);
+
+
+objectRegion = [708   535    11     9];
+
+points = detectMinEigenFeatures(im2gray(frame),'ROI',objectRegion);
+
+
+tracker = vision.PointTracker('MaxBidirectionalError',0.05,'NumPyramidLevels',3,'BlockSize',[11,11],'MaxIterations',50);
+initialize(tracker,points.Location,frame);
+
+Prev_Point = points.Location;
+
+%v = VideoWriter('TrackedBoey');
+%open(v)
+
+while hasFrame(hVideoSrc) && ii < 999
+    frame = rgb2gray(im2single(readFrame(hVideoSrc))); % Read second frame into img
+    
+    [points,validity, score] = tracker(frame);
+    out = insertMarker(frame,points(validity, :),'+');
+    txt = sprintf('Distance: (%.1f (m))', distance);
+    out = insertText(out, [points+25], txt);
+    videoPlayer(out);
+    %writeVideo(v,out)
+    
+    if validity == 0 
+        
+        Prev_Point = Prev_Point+mean(MotionModel);
+        
+        objectRegion = [Prev_Point(1,1)-10, Prev_Point(1,2)-10,20,20];
+       
+        new_points = detectMinEigenFeatures(im2gray(frame),'ROI',objectRegion);
+        new_points = new_points.selectStrongest(1);
+        
+        release(tracker)
+        initialize(tracker,new_points.Location,frame);
+        frameTimer = 0;
+
+    elseif frameTimer > 3  % if we track the same point for more that 3 frames
+        % Here we calculate the distance with the assumption that the size
+        % of the boey is similar to that of a human head just above water;
+        % which is about 15cm
+        Arcy = abs(atan((points(1)-1-py)/dy)-atan((points(1)+1-py)/dy));
+        Arcx = abs(atan((points(2)-1-px)/dx)-atan((points(2)+1-px)/dx));
+        distance = sqrt((boey_size/tan(Arcx))^2+(boey_size/tan(Arcy))^2);
+
+        % Here we calculate the distance with the pinhole model
+        y = abs(points(2)-px);
+        theta = atan(y/dy);
+        phi = 0.5*pi-theta;
+
+        distance = 2.5*tan(phi)
+
+        MotionModel(ii,:) = points - Prev_Point;
+        Prev_Point = points;
+        
+        
+    end
+
+    frameTimer= frameTimer+1;
+    ii = ii+1;
+
+end
+%close(v)
+close all
